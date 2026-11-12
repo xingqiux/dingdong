@@ -1,7 +1,9 @@
-FROM golang:1.22-alpine AS build
+FROM golang:1.23-alpine AS build
+ARG VERSION=dev
 WORKDIR /src
-COPY go.mod main.go ./
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /dingdong-server .
+COPY go.mod ./
+COPY *.go ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /dingdong-server .
 
 FROM alpine:3.20
 COPY --from=build /dingdong-server /usr/local/bin/dingdong-server

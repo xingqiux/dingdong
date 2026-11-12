@@ -1,0 +1,4 @@
+data/
+dingdong-server
+server.log
+*_test.go
