@@ -46,7 +46,8 @@ AI / 脚本 ──POST /api/notify (令牌)──▶ 服务端 (Go) ──SSE─
 **Homebrew**
 
 ```bash
-brew install --cask xingqiux/tap/dingdong
+brew tap xingqiux/tap && brew trust xingqiux/tap   # 新版 Homebrew 要先信任第三方 tap
+brew install --cask dingdong
 ```
 
 **或者**到 [Releases](https://github.com/xingqiux/dingdong/releases/latest) 下载 `Dingdong-vX.Y.Z.zip`，解压后拖进「应用程序」。
