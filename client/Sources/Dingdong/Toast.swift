@@ -14,8 +14,8 @@ final class ToastModel {
 final class ToastController {
     private let panel: NSPanel
     private let model = ToastModel()
-    private let width: CGFloat = 340
-    private let rowHeight: CGFloat = 118
+    private let width: CGFloat = 372
+    private let rowHeight: CGFloat = 116
     private var anchorX: CGFloat?
     var onTap: (() -> Void)?
 
@@ -56,13 +56,13 @@ final class ToastController {
     private func resize() {
         guard let screen = NSScreen.main, let x = anchorX else { return }
         let vf = screen.visibleFrame
-        let h = CGFloat(max(model.items.count, 1)) * rowHeight + 16
+        let h = CGFloat(max(model.items.count, 1)) * rowHeight + 40
         if h >= panel.frame.height {
             panel.setFrame(NSRect(x: x, y: vf.maxY - h, width: width, height: h), display: true)
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { [weak self] in
                 guard let self, let screen = NSScreen.main else { return }
-                let h = CGFloat(max(self.model.items.count, 1)) * self.rowHeight + 16
+                let h = CGFloat(max(self.model.items.count, 1)) * self.rowHeight + 40
                 let vf = screen.visibleFrame
                 self.panel.setFrame(NSRect(x: x, y: vf.maxY - h, width: self.width, height: h), display: true)
             }
@@ -104,7 +104,7 @@ final class ToastController {
         }
         anchorX = x
         if !panel.isVisible {
-            let h = rowHeight + 16
+            let h = rowHeight + 40
             panel.setFrame(NSRect(x: x, y: vf.maxY - h, width: width, height: h), display: false)
         }
     }
@@ -126,7 +126,7 @@ private struct ToastStack: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 26)
         .padding(.top, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onHover { model.hovering = $0 }
@@ -179,7 +179,7 @@ private struct ToastCard: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: .black.opacity(0.14), radius: 14, y: 6)
+            .shadow(color: .black.opacity(0.12), radius: 10, y: 5)
         )
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(accent.opacity(0.35), lineWidth: 1))
         .overlay(alignment: .topLeading) {
