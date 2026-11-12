@@ -57,13 +57,13 @@ final class Store {
     let demo: Bool
     private let defaults: UserDefaults
     private var task: Task<Void, Never>?
-    private let session: URLSession = {
+    private static func makeSession() -> URLSession {
         let c = URLSessionConfiguration.default
-        c.timeoutIntervalForRequest = 45 // 服务端每 15s 心跳
+        c.timeoutIntervalForRequest = 45 // 连上之后的空闲超时：服务端每 15s 心跳
         c.timeoutIntervalForResource = 60 * 60 * 24 * 365
         c.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: c)
-    }()
+    }
 
     init(demo: Bool = false) {
         self.demo = demo
@@ -121,6 +121,22 @@ final class Store {
         task = Task { [weak self] in await self?.runLoop() }
     }
 
+    /// 错开发起的连接尝试（秒）：前一个迟迟没回音，就再开一个全新的连接一起等，谁先收到数据用谁
+    private let attemptDelays: [Double] = [0, 3, 6]
+    /// 所有尝试都没收到第一份数据就整体放弃重来（服务端连上会立刻发 snapshot）
+    private let connectTimeout: Double = 12
+
+    @MainActor private final class Race {
+        var winner: Int?
+        var tasks: [Task<Int, Never>] = []
+        func win(_ k: Int) {
+            guard winner == nil else { return }
+            winner = k
+            for (j, t) in tasks.enumerated() where j != k { t.cancel() }
+        }
+        func cancelAll() { tasks.forEach { $0.cancel() } }
+    }
+
     private func runLoop() async {
         var backoff: Double = 1
         while !Task.isCancelled {
@@ -132,22 +148,55 @@ final class Store {
             req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
             req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
-            do {
-                let (bytes, resp) = try await session.bytes(for: req)
-                let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-                if code == 401 || code == 403 {
-                    setStatus(.unauthorized)
-                    return // 等用户改 token 后再连
-                }
-                guard code == 200 else { throw URLError(.badServerResponse) }
-                setStatus(.online)
-                backoff = 1
-                for try await line in bytes.lines {
-                    guard line.hasPrefix("data:") else { continue }
-                    handle(Data(line.dropFirst(5).utf8))
-                }
-            } catch {
-                if Task.isCancelled { return }
+            let race = Race()
+            for (k, delay) in attemptDelays.enumerated() {
+                race.tasks.append(Task { @MainActor [weak self] () -> Int in
+                    if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+                    guard let self, race.winner == nil, !Task.isCancelled else { return -1 }
+                    let session = Self.makeSession() // 每次尝试用独立的连接池，避开卡住的连接
+                    defer { session.invalidateAndCancel() }
+                    do {
+                        let (bytes, resp) = try await session.bytes(for: req)
+                        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                        guard code == 200 else { return code }
+                        for try await line in bytes.lines {
+                            guard line.hasPrefix("data:") else { continue }
+                            if race.winner == nil {
+                                race.win(k)
+                                self.setStatus(.online)
+                            }
+                            guard race.winner == k else { return -1 }
+                            self.handle(Data(line.dropFirst(5).utf8))
+                        }
+                        return 200
+                    } catch {
+                        return 0
+                    }
+                })
+            }
+            let watchdog = Task { @MainActor [connectTimeout] in
+                try? await Task.sleep(for: .seconds(connectTimeout))
+                if race.winner == nil { race.cancelAll() }
+            }
+            var codes: [Int] = []
+            await withTaskCancellationHandler {
+                for t in race.tasks { codes.append(await t.value) }
+            } onCancel: {
+                Task { @MainActor in race.cancelAll() }
+            }
+            watchdog.cancel()
+            if Task.isCancelled { return }
+
+            if codes.contains(401) || codes.contains(403) {
+                setStatus(.unauthorized)
+                return // 等用户改 token 后再连
+            }
+            if race.winner != nil {
+                backoff = 1 // 正常连过一阵子才断的，马上重连
+            } else if !codes.contains(where: { $0 > 0 && $0 != 200 }) {
+                // 都卡在连接阶段：多半是网络抖动（代理、TUN），不是服务器挂了，马上再来
+                try? await Task.sleep(for: .seconds(1))
+                continue
             }
             setStatus(.offline)
             try? await Task.sleep(for: .seconds(backoff))
