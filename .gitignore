@@ -4,3 +4,5 @@ server/data/
 server/dingdong-server
 server/server.log
 .DS_Store
+__pycache__/
+*.pyc
