@@ -1,0 +1,6 @@
+dist/
+client/.build/
+server/data/
+server/dingdong-server
+server/server.log
+.DS_Store
