@@ -1,0 +1,29 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+  client:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build -c release
+        working-directory: client
+      - run: python3 -m py_compile integrations/claude-code/claude-code-hook.py
+      - run: for f in scripts/*.sh scripts/ding integrations/claude-code/install.sh; do bash -n "$f"; done

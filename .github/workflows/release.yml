@@ -1,0 +1,69 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  app:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Build Dingdong.app (universal)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}" UNIVERSAL=1 ./scripts/build-app.sh
+          lipo -info dist/Dingdong.app/Contents/MacOS/Dingdong
+          cd dist
+          ditto -c -k --keepParent Dingdong.app "Dingdong-${GITHUB_REF_NAME}.zip"
+      - name: Build server binaries
+        working-directory: server
+        run: |
+          for target in linux/amd64 linux/arm64 darwin/arm64 darwin/amd64; do
+            os="${target%/*}"; arch="${target#*/}"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w -X main.version=${GITHUB_REF_NAME#v}" \
+              -o "../dist/dingdong-server-${os}-${arch}" .
+          done
+      - name: Checksums
+        working-directory: dist
+        run: shasum -a 256 Dingdong-*.zip dingdong-server-* | tee SHA256SUMS
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/Dingdong-*.zip dist/dingdong-server-* dist/SHA256SUMS \
+            --title "叮咚 ${GITHUB_REF_NAME}" --generate-notes
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Dingdong notification server
+            org.opencontainers.image.licenses=MIT
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/dingdong-server:${{ steps.v.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/dingdong-server:latest
