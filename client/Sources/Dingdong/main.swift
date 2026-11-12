@@ -94,6 +94,21 @@ MainActor.assumeIsolated {
         let size = i + 2 < args.count ? CGFloat(Double(args[i + 2]) ?? 1024) : 1024
         exit(Render.png(AppIconView(), size: size, to: args[i + 1]) ? 0 : 1)
     }
+    if let i = args.firstIndex(of: "--render-menubar"), i + 1 < args.count {
+        // 放大 8 倍的菜单栏图标预览：空闲 / 未读 / 勿扰 / 断线
+        let moods: [MenubarCat.Mood] = [.idle, .unread, .sleeping, .offline]
+        let k: CGFloat = 8, w: CGFloat = 20 * k, h: CGFloat = 18 * k
+        let out = NSImage(size: NSSize(width: w * 4 + 50, height: h + 20), flipped: false) { r in
+            NSColor.white.setFill(); r.fill()
+            for (j, m) in moods.enumerated() {
+                MenubarCat.image(m).draw(in: NSRect(x: 10 + CGFloat(j) * (w + 10), y: 10, width: w, height: h))
+            }
+            return true
+        }
+        let rep = NSBitmapImageRep(data: out.tiffRepresentation!)!
+        try? rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: args[i + 1]))
+        exit(0)
+    }
     let app = NSApplication.shared
     let delegate = AppDelegate()
     app.delegate = delegate

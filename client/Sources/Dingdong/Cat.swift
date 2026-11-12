@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// 叮咚的小三花猫。所有坐标都在 100×100 的设计空间里，按实际尺寸缩放。
@@ -277,5 +278,75 @@ struct RingingCat: View {
                 withAnimation(.easeInOut(duration: 0.08)) { ear = a }
             }
         }
+    }
+}
+
+// MARK: - 菜单栏小猫（单色模板图，系统自动适配深浅色）
+
+enum MenubarCat {
+    enum Mood { case idle, unread, sleeping, offline }
+
+    /// 头 + 两只耳朵合成一个剪影
+    private static let silhouette: CGPath = {
+        let r = CGRect(x: 0, y: 0, width: 100, height: 100)
+        return Head().path(in: r).cgPath
+            .union(Ear(left: true).path(in: r).cgPath)
+            .union(Ear(left: false).path(in: r).cgPath)
+    }()
+
+    static func image(_ mood: Mood, angle: CGFloat = 0) -> NSImage {
+        let size = NSSize(width: 20, height: 18)
+        let img = NSImage(size: size, flipped: true) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            // 设计空间里剪影大约占 x 8…92、y 9…90，等比缩放进图标
+            let s: CGFloat = 16.4 / 84
+            let ox = (rect.width - 84 * s) / 2 - 8 * s
+            let oy = (rect.height - 81 * s) / 2 - 9 * s
+            // 来消息时绕下巴左右歪头
+            ctx.translateBy(x: rect.midX, y: rect.maxY - 1)
+            ctx.rotate(by: angle * .pi / 180)
+            ctx.translateBy(x: -rect.midX, y: -(rect.maxY - 1))
+            ctx.translateBy(x: ox, y: oy)
+            ctx.scaleBy(x: s, y: s)
+
+            let ink = NSColor.black.cgColor
+            ctx.setFillColor(ink)
+            ctx.setStrokeColor(ink)
+            ctx.setLineJoin(.round)
+            ctx.setLineCap(.round)
+            if mood == .offline { ctx.setAlpha(0.55) }
+
+            if mood == .unread {
+                ctx.addPath(silhouette)
+                ctx.fillPath()
+                ctx.setBlendMode(.clear) // 眼睛挖空
+                for x: CGFloat in [37, 63] { ctx.fillEllipse(in: CGRect(x: x - 6, y: 52, width: 12, height: 13)) }
+                return true
+            }
+
+            ctx.setLineWidth(1.45 / s)
+            ctx.addPath(silhouette)
+            ctx.strokePath()
+            ctx.setLineWidth(1.25 / s)
+            switch mood {
+            case .sleeping:
+                for x: CGFloat in [37, 63] {
+                    ctx.move(to: CGPoint(x: x - 7, y: 56))
+                    ctx.addQuadCurve(to: CGPoint(x: x + 7, y: 56), control: CGPoint(x: x, y: 64))
+                }
+                ctx.strokePath()
+            case .offline:
+                for x: CGFloat in [37, 63] {
+                    ctx.move(to: CGPoint(x: x - 5, y: 53)); ctx.addLine(to: CGPoint(x: x + 5, y: 63))
+                    ctx.move(to: CGPoint(x: x + 5, y: 53)); ctx.addLine(to: CGPoint(x: x - 5, y: 63))
+                }
+                ctx.strokePath()
+            default:
+                for x: CGFloat in [37, 63] { ctx.fillEllipse(in: CGRect(x: x - 5.5, y: 52, width: 11, height: 12)) }
+            }
+            return true
+        }
+        img.isTemplate = true
+        return img
     }
 }

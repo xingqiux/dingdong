@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 顶部栏：铃铛图标（来消息会摇）、未读数、弹出面板
+/// 顶部栏：小猫图标（来消息会歪头晃一晃）、未读数、弹出面板
 @MainActor
 final class StatusBarController: NSObject, NSPopoverDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -42,37 +42,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private func render(angle: CGFloat) {
         guard let b = item.button else { return }
         let unread = store.unread
-        let name: String
+        let mood: MenubarCat.Mood
         switch true {
-        case store.status == .offline || store.status == .unauthorized: name = "bell.slash"
-        case store.isQuiet: name = "moon.zzz.fill"
-        case unread > 0: name = "bell.fill"
-        default: name = "bell"
+        case store.status == .offline || store.status == .unauthorized: mood = .offline
+        case store.isQuiet: mood = .sleeping
+        case unread > 0: mood = .unread
+        default: mood = .idle
         }
-        b.image = Self.icon(name, angle: angle)
+        b.image = MenubarCat.image(mood, angle: angle)
         b.font = .systemFont(ofSize: 12, weight: .semibold).rounded
         b.title = unread > 0 ? (unread > 99 ? " 99+" : " \(unread)") : ""
-    }
-
-    static func icon(_ name: String, angle: CGFloat) -> NSImage {
-        let cfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
-        let base = NSImage(systemSymbolName: name, accessibilityDescription: "Dingdong")!
-            .withSymbolConfiguration(cfg)!
-        let size = NSSize(width: 20, height: 18)
-        let img = NSImage(size: size, flipped: false) { rect in
-            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            let bs = base.size
-            // 绕铃铛顶部摆动
-            let pivot = CGPoint(x: rect.midX, y: rect.midY + bs.height / 2 - 1)
-            ctx.translateBy(x: pivot.x, y: pivot.y)
-            ctx.rotate(by: angle * .pi / 180)
-            ctx.translateBy(x: -pivot.x, y: -pivot.y)
-            base.draw(in: NSRect(x: rect.midX - bs.width / 2, y: rect.midY - bs.height / 2,
-                                 width: bs.width, height: bs.height))
-            return true
-        }
-        img.isTemplate = true
-        return img
     }
 
     /// 叮～叮～ 衰减摆动
@@ -91,7 +70,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                     self.render(angle: 0)
                     return
                 }
-                self.render(angle: 24 * sin(p * .pi * 7) * pow(1 - p, 1.6))
+                self.render(angle: 16 * sin(p * .pi * 7) * pow(1 - p, 1.6))
             }
         }
     }
