@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# 用法: ding "标题" ["内容"] ["来源"] [info|success|warning|error]
+# 环境变量: DINGDONG_URL (默认 http://127.0.0.1:8787)  DINGDONG_TOKEN (必填)
+set -euo pipefail
+[ $# -ge 1 ] || { echo 'usage: ding "标题" ["内容"] ["来源"] [level]' >&2; exit 2; }
+: "${DINGDONG_TOKEN:?请设置 DINGDONG_TOKEN}"
+curl -fsS -X POST "${DINGDONG_URL:-http://127.0.0.1:8787}/api/notify" \
+  -H "Authorization: Bearer $DINGDONG_TOKEN" \
+  --data-urlencode "title=$1" \
+  --data-urlencode "body=${2:-}" \
+  --data-urlencode "source=${3:-${DINGDONG_SOURCE:-终端}}" \
+  --data-urlencode "level=${4:-info}"
+echo
