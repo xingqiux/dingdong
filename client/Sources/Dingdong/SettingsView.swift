@@ -3,83 +3,86 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(Store.self) private var store
-    var close: () -> Void
+    var go: (Page) -> Void
 
     @State private var url = ""
     @State private var token = ""
     @State private var reveal = false
     @State private var testState: TestState = .idle
-    @State private var copied = false
     @State private var login = false
 
     enum TestState { case idle, sending, ok, fail }
 
     var body: some View {
         @Bindable var store = store
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(spacing: 0) {
             HStack(spacing: 10) {
-                IconButton(symbol: "chevron.left", tint: Theme.soft, help: "返回") { save(); close() }
+                IconButton(symbol: "chevron.left", tint: Theme.soft, help: "返回") { save(); go(.inbox) }
                 Text("设置").font(Theme.rounded(17, .heavy)).foregroundStyle(Theme.ink)
                 Spacer()
                 IconButton(symbol: "power", tint: Theme.soft, help: "退出叮咚") { NSApp.terminate(nil) }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
 
-            Section("服务器") {
-                Field(icon: "server.rack", placeholder: "http://127.0.0.1:8787", text: $url)
-                HStack(spacing: 6) {
-                    Field(icon: "key.fill", placeholder: "Token", text: $token, secure: !reveal)
-                    IconButton(symbol: reveal ? "eye.slash.fill" : "eye.fill", tint: Theme.soft, help: "显示/隐藏") {
-                        reveal.toggle()
-                    }
-                }
-                HStack(spacing: 8) {
-                    PillButton(title: "保存并连接", symbol: "bolt.fill", color: Theme.pink) { save() }
-                    PillButton(title: testTitle, symbol: testSymbol, color: testColor) { test() }
-                        .disabled(testState == .sending)
-                }
-            }
-
-            Section("提醒") {
-                Toggle(isOn: $store.toastOn) { Label("右上角弹出卡片", systemImage: "rectangle.stack.fill") }
-                Toggle(isOn: $store.soundOn) { Label("叮咚音效", systemImage: "speaker.wave.2.fill") }
-                Toggle(isOn: $login) { Label("开机自动启动", systemImage: "sunrise.fill") }
-                    .onChange(of: login) { _, v in store.launchAtLogin = v }
-            }
-            .toggleStyle(CandyToggle())
-
-            Section("给 AI 用的调用方式") {
-                Text(store.curlExample)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Theme.ink.opacity(0.75))
-                    .lineLimit(5)
-                    .padding(10)
-                    .padding(.trailing, 22)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card))
-                    .overlay(alignment: .topTrailing) {
-                        Button {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(store.curlExample, forType: .string)
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { copied = true }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { withAnimation { copied = false } }
-                        } label: {
-                            Image(systemName: copied ? "checkmark.circle.fill" : "doc.on.doc.fill")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(copied ? Theme.mint : Theme.pink)
-                                .contentTransition(.symbolEffect(.replace))
-                                .padding(8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    SettingsSection("服务器") {
+                        Field(icon: "server.rack", placeholder: "https://ding.example.com", text: $url)
+                        HStack(spacing: 6) {
+                            Field(icon: "key.fill", placeholder: "客户端 Token（服务端的管理员 token）", text: $token, secure: !reveal)
+                            IconButton(symbol: reveal ? "eye.slash.fill" : "eye.fill", tint: Theme.soft, help: "显示/隐藏") {
+                                reveal.toggle()
+                            }
                         }
-                        .buttonStyle(Squishy())
-                        .help("复制")
+                        HStack(spacing: 8) {
+                            PillButton(title: "保存并连接", symbol: "bolt.fill", color: Theme.pink) { save() }
+                            PillButton(title: testTitle, symbol: testSymbol, color: testColor) { test() }
+                                .disabled(testState == .sending)
+                        }
                     }
+
+                    SettingsSection("提醒") {
+                        Toggle(isOn: $store.toastOn) { Label("右上角弹出卡片", systemImage: "rectangle.stack.fill") }
+                        Toggle(isOn: $store.soundOn) { Label("叮咚音效", systemImage: "speaker.wave.2.fill") }
+                        Toggle(isOn: $store.quietOn) { Label("安静时段", systemImage: "moon.zzz.fill") }
+                        if store.quietOn {
+                            HStack(spacing: 6) {
+                                HourPicker(hour: $store.quietStart)
+                                Text("到").foregroundStyle(Theme.soft)
+                                HourPicker(hour: $store.quietEnd)
+                                Spacer()
+                                Text("不响不弹，error 照常弹")
+                                    .font(Theme.rounded(10.5)).foregroundStyle(Theme.soft)
+                            }
+                            .padding(.leading, 22)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                        Toggle(isOn: $login) { Label("开机自动启动", systemImage: "sunrise.fill") }
+                            .onChange(of: login) { _, v in store.launchAtLogin = v }
+                    }
+                    .toggleStyle(CandyToggle())
+                    .animation(Motion.spring(0.35, 0.8), value: store.quietOn)
+
+                    SettingsSection("接入 AI") {
+                        NavRow(icon: "pawprint.fill", title: "AI 令牌与接入方式",
+                               detail: store.tokens.isEmpty ? "给每个 AI 发一个只能发通知的令牌" : "已有 \(store.tokens.count) 个令牌") {
+                            save()
+                            go(.tokens)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             }
-            Spacer(minLength: 0)
+            .scrollIndicators(.never)
         }
-        .padding(16)
         .onAppear {
             url = store.serverURL
             token = store.token
             login = store.launchAtLogin
+            Task { await store.loadTokens() }
         }
     }
 
@@ -97,7 +100,7 @@ struct SettingsView: View {
         withAnimation { testState = .sending }
         Task {
             let ok = await store.sendTest()
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) { testState = ok ? .ok : .fail }
+            withAnimation(Motion.spring(0.35, 0.5)) { testState = ok ? .ok : .fail }
             try? await Task.sleep(for: .seconds(2))
             withAnimation { testState = .idle }
         }
@@ -114,7 +117,7 @@ struct SettingsView: View {
     }
 }
 
-private struct Section<Content: View>: View {
+struct SettingsSection<Content: View>: View {
     var title: String
     @ViewBuilder var content: Content
     init(_ title: String, @ViewBuilder content: () -> Content) {
@@ -131,11 +134,65 @@ private struct Section<Content: View>: View {
     }
 }
 
-private struct Field: View {
+private struct HourPicker: View {
+    @Binding var hour: Int
+    var body: some View {
+        Menu {
+            ForEach(0..<24, id: \.self) { h in Button(String(format: "%02d:00", h)) { hour = h } }
+        } label: {
+            Text(String(format: "%02d:00", hour)).font(Theme.rounded(12, .bold)).monospacedDigit()
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(Theme.card))
+    }
+}
+
+struct NavRow: View {
+    var icon: String
+    var title: String
+    var detail: String
+    var action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.pink.gradient))
+                    .rotationEffect(.degrees(hover && !Motion.reduced ? -10 : 0))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(Theme.rounded(13, .bold)).foregroundStyle(Theme.ink)
+                    Text(detail).font(Theme.rounded(11)).foregroundStyle(Theme.soft)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Theme.soft)
+                    .offset(x: hover ? 3 : 0)
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card)
+                .shadow(color: Theme.pink.opacity(hover ? 0.2 : 0.06), radius: hover ? 8 : 4, y: 2))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(Squishy())
+        .onHover { h in withAnimation(Motion.spring(0.3, 0.6)) { hover = h } }
+    }
+}
+
+struct Field: View {
     var icon: String
     var placeholder: String
     @Binding var text: String
     var secure = false
+    var onSubmit: () -> Void = {}
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -150,6 +207,7 @@ private struct Field: View {
             .textFieldStyle(.plain)
             .font(Theme.rounded(12.5, .medium))
             .focused($focused)
+            .onSubmit(onSubmit)
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
@@ -160,7 +218,7 @@ private struct Field: View {
                     .strokeBorder(focused ? Theme.pink.opacity(0.7) : Theme.hairline, lineWidth: focused ? 1.5 : 1))
         )
         .scaleEffect(focused ? 1.01 : 1)
-        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: focused)
+        .animation(Motion.spring(0.3, 0.6), value: focused)
     }
 }
 
@@ -185,7 +243,7 @@ struct PillButton: View {
             .scaleEffect(hover ? 1.05 : 1)
         }
         .buttonStyle(Squishy())
-        .onHover { h in withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { hover = h } }
+        .onHover { h in withAnimation(Motion.spring(0.3, 0.6)) { hover = h } }
     }
 }
 
@@ -206,7 +264,7 @@ struct CandyToggle: ToggleStyle {
                     .padding(2)
             }
             .onTapGesture {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) { configuration.isOn.toggle() }
+                withAnimation(Motion.spring(0.3, 0.55)) { configuration.isOn.toggle() }
             }
         }
     }

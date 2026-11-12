@@ -8,10 +8,21 @@ struct Message: Codable, Identifiable, Equatable {
     let source: String
     let level: String
     let url: String?
+    var count: Int?
     let createdAt: Int64
 
     var date: Date { Date(timeIntervalSince1970: TimeInterval(createdAt) / 1000) }
     var link: URL? { url.flatMap { $0.isEmpty ? nil : URL(string: $0) } }
+}
+
+/// 一个 AI 的发送令牌（服务端只返回前缀，不返回明文）
+struct SenderToken: Codable, Identifiable, Equatable {
+    let name: String
+    let prefix: String
+    let createdAt: Int64
+    let lastUsedAt: Int64?
+    let count: Int64
+    var id: String { name }
 }
 
 struct StreamEvent: Decodable {
